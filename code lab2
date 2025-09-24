@@ -1,0 +1,180 @@
+-- 1) DDL — CREATE TABLES
+CREATE TABLE IF NOT EXISTS airline_info (
+  airline_id      INT PRIMARY KEY,
+  airline_code    VARCHAR(30) NOT NULL,
+  airline_name    VARCHAR(50) NOT NULL,
+  airline_country VARCHAR(50) NOT NULL,
+  created_at      TIMESTAMP   NOT NULL,
+  updated_at      TIMESTAMP   NOT NULL,
+  info            VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS airport (
+  airport_id   INT PRIMARY KEY,
+  airport_name VARCHAR(50) NOT NULL,
+  country      VARCHAR(50) NOT NULL,
+  state        VARCHAR(50) NOT NULL,
+  city         VARCHAR(50) NOT NULL,
+  created_at   TIMESTAMP   NOT NULL,
+  updated_at   TIMESTAMP   NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS passengers (
+  passenger_id           INT PRIMARY KEY,
+  first_name             VARCHAR(50) NOT NULL,
+  last_name              VARCHAR(50) NOT NULL,
+  date_of_birth          DATE        NOT NULL,
+  gender                 VARCHAR(50) NOT NULL,
+  country_of_citizenship VARCHAR(50) NOT NULL,
+  country_of_residence   VARCHAR(50) NOT NULL,
+  passport_number        VARCHAR(20) NOT NULL,
+  created_at             TIMESTAMP   NOT NULL,
+  updated_at             TIMESTAMP   NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS flights (
+  flight_id             INT PRIMARY KEY,
+  sch_departure_time    TIMESTAMP   NOT NULL,
+  sch_arrival_time      TIMESTAMP   NOT NULL,
+  departing_airport_id  INT         NOT NULL,
+  arriving_airport_id   INT         NOT NULL,
+  departing_gate        VARCHAR(50) NOT NULL,
+  arriving_gate         VARCHAR(50) NOT NULL,
+  airline_id            INT         NOT NULL,
+  act_departure_time    TIMESTAMP   NOT NULL,
+  act_arrival_time      TIMESTAMP   NOT NULL,
+  created_at            TIMESTAMP   NOT NULL,
+  updated_at            TIMESTAMP   NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS booking (
+  booking_id       INT PRIMARY KEY,
+  flight_id        INT NOT NULL,
+  passenger_id     INT NOT NULL,
+  booking_platform VARCHAR(50) NOT NULL,
+  created_at       TIMESTAMP NOT NULL,
+  updated_at       TIMESTAMP NOT NULL,
+  status           VARCHAR(50) NOT NULL,
+  price            DECIMAL(12,2) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS booking_flight (
+  booking_flight_id INT PRIMARY KEY,
+  booking_id        INT NOT NULL,
+  flight_id         INT NOT NULL,
+  created_at        TIMESTAMP NOT NULL,
+  updated_at        TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS boarding_pass (
+  boarding_pass_id INT PRIMARY KEY,
+  booking_id       INT NOT NULL,
+  seat             VARCHAR(50) NOT NULL,
+  boarding_time    TIMESTAMP   NOT NULL,
+  created_at       TIMESTAMP   NOT NULL,
+  updated_at       TIMESTAMP   NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS baggage (
+  baggage_id   INT PRIMARY KEY,
+  weight_in_kg DECIMAL(6,2) NOT NULL,
+  created_at   TIMESTAMP NOT NULL,
+  updated_at   TIMESTAMP NOT NULL,
+  booking_id   INT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS baggage_check (
+  baggage_check_id INT PRIMARY KEY,
+  check_result     VARCHAR(50) NOT NULL,
+  created_at       TIMESTAMP NOT NULL,
+  updated_at       TIMESTAMP NOT NULL,
+  booking_id       INT NOT NULL,
+  passenger_id     INT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS security_check (
+  security_check_id INT PRIMARY KEY,
+  check_result      VARCHAR(50) NOT NULL,
+  created_at        TIMESTAMP NOT NULL,
+  updated_at        TIMESTAMP NOT NULL,
+  passenger_id      INT NOT NULL
+);
+
+-- 2) ALTER TASKS (из условия)
+ALTER TABLE airline_info RENAME TO airline;
+ALTER TABLE booking RENAME COLUMN price TO ticket_price;
+ALTER TABLE flights ALTER COLUMN departing_gate TYPE TEXT;
+ALTER TABLE airline DROP COLUMN IF EXISTS info;
+
+-- 3) FOREIGN KEYS (все связи)
+ALTER TABLE flights
+  ADD CONSTRAINT fk_flight_dep_airport FOREIGN KEY (departing_airport_id) REFERENCES airport(airport_id),
+  ADD CONSTRAINT fk_flight_arr_airport FOREIGN KEY (arriving_airport_id)  REFERENCES airport(airport_id);
+
+ALTER TABLE flights
+  ADD CONSTRAINT fk_flight_airline FOREIGN KEY (airline_id) REFERENCES airline(airline_id);
+
+ALTER TABLE booking
+  ADD CONSTRAINT fk_book_flight FOREIGN KEY (flight_id) REFERENCES flights(flight_id) ON DELETE CASCADE,
+  ADD CONSTRAINT fk_book_pass   FOREIGN KEY (passenger_id) REFERENCES passengers(passenger_id) ON DELETE CASCADE;
+
+ALTER TABLE booking_flight
+  ADD CONSTRAINT fk_bfl_book   FOREIGN KEY (booking_id) REFERENCES booking(booking_id) ON DELETE CASCADE,
+  ADD CONSTRAINT fk_bfl_flight FOREIGN KEY (flight_id)   REFERENCES flights(flight_id) ON DELETE CASCADE;
+
+ALTER TABLE boarding_pass
+  ADD CONSTRAINT fk_bpass_book FOREIGN KEY (booking_id) REFERENCES booking(booking_id) ON DELETE CASCADE;
+
+ALTER TABLE baggage
+  ADD CONSTRAINT fk_bagg_book  FOREIGN KEY (booking_id) REFERENCES booking(booking_id) ON DELETE CASCADE;
+
+ALTER TABLE baggage_check
+  ADD CONSTRAINT fk_bcheck_book FOREIGN KEY (booking_id)   REFERENCES booking(booking_id) ON DELETE CASCADE,
+  ADD CONSTRAINT fk_bcheck_pass FOREIGN KEY (passenger_id) REFERENCES passengers(passenger_id) ON DELETE CASCADE;
+
+ALTER TABLE security_check
+  ADD CONSTRAINT fk_sec_pass FOREIGN KEY (passenger_id) REFERENCES passengers(passenger_id) ON DELETE CASCADE;
+
+-- 4) DML TASKS (вставки/обновления/удаления)
+
+-- 4.1 Вставить 200 случайных аэропортов
+INSERT INTO airport(airport_id, airport_name, country, state, city, created_at, updated_at)
+SELECT gs,
+       'Airport '||gs,
+       (ARRAY['Kazakhstan','USA','France','Turkey','Brazil','Poland'])[1 + (random()*5)::int],
+       'State '||((random()*50)::int),
+       'City '||((random()*200)::int),
+       now() - ((random()*365)::int || ' days')::interval,
+       now()
+FROM generate_series(1,200) AS gs
+ON CONFLICT (airport_id) DO NOTHING;
+
+-- 4.2 Добавить KazAir, затем обновить страну на Turkey
+INSERT INTO airline(airline_id, airline_code, airline_name, airline_country, created_at, updated_at)
+VALUES (1001, 'KZK', 'KazAir', 'Kazakhstan', now(), now())
+ON CONFLICT (airline_id) DO NOTHING;
+
+UPDATE airline SET airline_country = 'Turkey', updated_at = now()
+WHERE airline_name = 'KazAir';
+
+-- 4.3 Добавить еще три авиалинии одной командой
+INSERT INTO airline(airline_id, airline_code, airline_name, airline_country, created_at, updated_at)
+VALUES
+  (1002,'FR1','AirEasy','France', now(), now()),
+  (1003,'BR1','FlyHigh','Brazil', now(), now()),
+  (1004,'PL1','FlyFly','Poland', now(), now())
+ON CONFLICT (airline_id) DO NOTHING;
+
+-- 4.4 Удалить все рейсы с прилётом в 2024 году (по плану или факту)
+DELETE FROM flights
+WHERE EXTRACT(YEAR FROM sch_arrival_time) = 2024
+   OR EXTRACT(YEAR FROM act_arrival_time) = 2024;
+
+-- 4.5 Увеличить цену билетов в booking на 15%
+UPDATE booking
+SET ticket_price = ticket_price * 1.15,
+    updated_at = now();
+
+-- 4.6 Удалить все брони, где цена < 10000
+DELETE FROM booking
+WHERE ticket_price < 10000;
